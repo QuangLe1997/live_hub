@@ -319,10 +319,10 @@ import {
 // State Management
 const flussonicAPI = ref(null)
 const serverConfig = reactive({
-  rtmpUrl: 'http://103.155.161.204:1935',
-  url: 'http://103.155.161.204:10000',
-  username: 'hoiquanai',
-  password: '77ZjmUcwikm_pz^jKKCm',
+  rtmpUrl: import.meta.env.VITE_RTMP_URL,
+  url: import.meta.env.VITE_FLUSSONIC_URL,
+  username: import.meta.env.VITE_FLUSSONIC_USERNAME,
+  password: import.meta.env.VITE_FLUSSONIC_PASSWORD,
   status: 'disconnected'
 })
 const relayConfigs = ref([])

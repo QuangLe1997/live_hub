@@ -3,7 +3,7 @@ import {ref} from 'vue'
 import VideoUploader from './components/VideoUploader.vue'
 import FacebookVideoUploader from './components/FacebookVideoUploader.vue'
 import StreamingDashboard from './components/StreamingDashboard.vue'
-import {Settings, Upload, Video} from 'lucide-vue-next'
+import {Upload, Video} from 'lucide-vue-next'
 
 const currentTab = ref('live')
 const appName = import.meta.env.VITE_APP_NAME
