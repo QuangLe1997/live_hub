@@ -17,10 +17,9 @@
                 <iframe
                     v-if="previewIframe"
                     :src="previewIframe"
+                    height="100%"
                     width="100%"
-                    height="500px"
-                    frameborder="0"
-                    allowfullscreen>
+                >
                 </iframe>
                 <div id="player" class="player-container"></div>
                 <div v-if="!streamStatus.isLive" class="offline-overlay">
@@ -320,7 +319,7 @@ import {
 const flussonicAPI = ref(null)
 const serverConfig = reactive({
   rtmpUrl: import.meta.env.VITE_RTMP_URL,
-  url: import.meta.env.VITE_FLUSSONIC_URL,
+  url: import.meta.env.VITE_FLUSSONIC_HOST,
   username: import.meta.env.VITE_FLUSSONIC_USERNAME,
   password: import.meta.env.VITE_FLUSSONIC_PASSWORD,
   status: 'disconnected'
@@ -381,7 +380,6 @@ const saveServerConfig = async () => {
         serverConfig.username,
         serverConfig.password
     )
-
     // Test connection
     await flussonicAPI.value.validateConnection()
     // Start status updates if stream exists
@@ -420,6 +418,7 @@ const createStream = async () => {
     startStatusUpdates(flussonicAPI.value, streamConfigName.value)
     isCreateSuccess.value = true
     localStorage.setItem('streamConfig', JSON.stringify(streamConfig))
+    localStorage.setItem('streamName', streamConfigName.value)
     const serverUrl = new URL(serverConfig.url)
     previewIframe.value = `${serverUrl}${streamConfigName.value}/embed.html`
   } catch (error) {
@@ -436,6 +435,7 @@ const stopStream = async () => {
     serverConfig.status = 'disconnected'
     stopStatusUpdates()
     localStorage.removeItem('streamConfig')
+    localStorage.removeItem('streamName')
   } catch (error) {
     showToastMessage(error.message, 'error')
   }
@@ -446,14 +446,6 @@ const validateServerUrl = () => {
     serverErrors.url = 'Please enter a valid URL'
   } else {
     serverErrors.url = ''
-  }
-}
-
-const validateStreamNameInput = () => {
-  if (!validateStreamName(streamConfigName.value)) {
-    streamErrors.name = 'Stream name must be at least 3 characters and contain only letters, numbers, hyphens and underscores'
-  } else {
-    streamErrors.name = ''
   }
 }
 
@@ -494,14 +486,12 @@ const copyToClipboard = async (text) => {
 // Lifecycle Hooks
 onMounted(() => {
   const savedStreamConfig = localStorage.getItem('streamConfig')
+  streamConfigName.value = localStorage.getItem('streamName')
   if (savedStreamConfig) {
     streamConfig = JSON.parse(savedStreamConfig)
     if (streamConfig.pushes) {
       relayConfigs.value = streamConfig.pushes
       relayErrors.value = streamConfig.pushes.map(() => ({}))
-    }
-    if (streamConfig.name) {
-      streamConfigName.value = streamConfig.name
     }
   }
   if (streamConfigName.value) {
