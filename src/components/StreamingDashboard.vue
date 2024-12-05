@@ -235,10 +235,10 @@
         v-if="showToast"
         :class="[
         'toast-notification',
-        toastMessage.includes('error') ? 'toast-error' : 'toast-success'
+        toastMessage?.includes('Error') ? 'toast-error' : 'toast-success'
       ]"
     >
-      <CheckCircle v-if="!toastMessage.includes('error')" class="toast-icon"/>
+      <CheckCircle v-if="!toastMessage.includes('Error')" class="toast-icon"/>
       <AlertCircle v-else class="toast-icon"/>
       <span>{{ toastMessage }}</span>
     </div>

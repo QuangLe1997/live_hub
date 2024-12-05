@@ -27,7 +27,7 @@ class FlussonicAPI {
             return response.data;
         } catch (error) {
             console.error('Connection error:', error.response?.data || error.message);
-            throw new Error('Failed to connect to Flussonic server');
+            throw new Error('Failed to connect to Stream server');
         }
     }
 
