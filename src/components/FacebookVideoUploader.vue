@@ -1,4 +1,3 @@
-//FacebookVideoUploader.vue
 <template>
   <div class="container">
     <h2>Upload Video to Facebook</h2>
@@ -16,9 +15,9 @@
         <div class="section-title">SELECT VIDEO FILE</div>
         <div class="file-input-container">
           <input
-            type="file"
-            @change="handleFileSelect"
-            accept="video/*"
+              type="file"
+              @change="handleFileSelect"
+              accept="video/*"
           >
           <div v-if="selectedFile" class="file-name">
             {{ selectedFile.name }}
@@ -32,18 +31,18 @@
           <span class="required-mark">*</span>
         </div>
         <input
-          v-model="videoDetails.title"
-          type="text"
-          required
-          placeholder="Enter video title"
+            v-model="videoDetails.title"
+            type="text"
+            required
+            placeholder="Enter video title"
         >
       </div>
 
       <div class="form-group">
         <div class="section-title">DESCRIPTION</div>
         <textarea
-          v-model="videoDetails.description"
-          placeholder="Enter video description"
+            v-model="videoDetails.description"
+            placeholder="Enter video description"
         ></textarea>
       </div>
 
@@ -60,16 +59,16 @@
       <div v-if="uploadProgress > 0" class="progress-container">
         <div class="progress-bar">
           <div
-            class="progress"
-            :style="{ width: uploadProgress + '%' }"
+              class="progress"
+              :style="{ width: uploadProgress + '%' }"
           ></div>
         </div>
       </div>
 
       <button
-        class="upload-button"
-        @click="handleUpload"
-        :disabled="!selectedFile || uploading || !videoDetails.title"
+          class="upload-button"
+          @click="handleUpload"
+          :disabled="!selectedFile || uploading || !videoDetails.title"
       >
         {{ uploading ? 'UPLOADING...' : 'UPLOAD VIDEO' }}
       </button>
@@ -78,66 +77,135 @@
 </template>
 
 <script>
-import { ref, reactive, onMounted } from 'vue'
+import {computed, reactive, ref, onMounted} from 'vue'
 
 export default {
-  name: 'FacebookVideoUploader',
+  name: 'VideoUploader',
   setup() {
-    const isAuthenticated = ref(false)
+    const facebookAuth = ref(false)
+    const youtubeAuth = ref(false)
     const selectedFile = ref(null)
-    const uploadProgress = ref(0)
-    const uploading = ref(false)
+    const isUploading = ref(false)
+    const gapiLoaded = ref(false)
+    const googleAuth = ref(null)
+
+    const uploadTargets = reactive({
+      facebook: false,
+      youtube: false
+    })
+
+    const uploadProgress = reactive({
+      Facebook: {percentage: 0, status: ''},
+      YouTube: {percentage: 0, status: ''}
+    })
 
     const videoDetails = reactive({
       title: '',
       description: '',
-      privacy: 'EVERYONE'
+      tags: '',
+      facebookPrivacy: 'EVERYONE',
+      youtubePrivacy: 'private'
     })
 
-    const initFacebookSDK = () => {
-      return new Promise((resolve) => {
-        window.fbAsyncInit = function() {
-          FB.init({
-            appId: import.meta.env.VITE_FACEBOOK_APP_ID,
-            cookie: true,
-            xfbml: true,
-            version: 'v18.0'
-          })
+    const initGoogleAuth = async () => {
+      try {
+        // Load the Google API Script
+        await new Promise((resolve) => {
+          const script = document.createElement('script')
+          script.src = 'https://apis.google.com/js/api.js'
+          script.onload = resolve
+          document.head.appendChild(script)
+        })
 
-          FB.getLoginStatus(function(response) {
-            if (response.status === 'connected') {
-              isAuthenticated.value = true
-            }
-          })
+        // Load additional Google Identity Services script
+        await new Promise((resolve) => {
+          const script = document.createElement('script')
+          script.src = 'https://accounts.google.com/gsi/client'
+          script.onload = resolve
+          document.head.appendChild(script)
+        })
 
-          resolve()
+        // Initialize the Google API client
+        await new Promise((resolve) => {
+          window.gapi.load('client:auth2', resolve)
+        })
+
+        // Initialize the client with your credentials
+        await window.gapi.client.init({
+          clientId: import.meta.env.VITE_GOOGLE_CLIENT_ID || 'YOUR_GOOGLE_CLIENT_ID', // Use environment variable
+          scope: 'https://www.googleapis.com/auth/youtube.upload',
+          discoveryDocs: ['https://www.googleapis.com/discovery/v1/apis/youtube/v3/rest']
+        })
+
+        googleAuth.value = window.gapi.auth2.getAuthInstance()
+        gapiLoaded.value = true
+
+        // Check if user is already signed in
+        if (googleAuth.value.isSignedIn.get()) {
+          youtubeAuth.value = true
         }
-
-        // Load Facebook SDK
-        ;(function(d, s, id) {
-          var js, fjs = d.getElementsByTagName(s)[0]
-          if (d.getElementById(id)) return
-          js = d.createElement(s)
-          js.id = id
-          js.src = "https://connect.facebook.net/en_US/sdk.js"
-          fjs.parentNode.insertBefore(js, fjs)
-        }(document, 'script', 'facebook-jssdk'))
-      })
+      } catch (error) {
+        console.error('Failed to initialize Google API:', error)
+      }
     }
 
     onMounted(() => {
-      initFacebookSDK()
+      initGoogleAuth()
     })
 
-    const handleFBLogin = () => {
-      FB.login(function(response) {
-        if (response.status === 'connected') {
-          isAuthenticated.value = true
-        } else {
-          console.error('Facebook login failed')
-          alert('Login failed. Please try again.')
+    const handleLogin = async (platform) => {
+      if (platform === 'facebook') {
+        if (window.location.protocol !== 'https:') {
+          alert('Facebook login requires HTTPS. Please access this page via HTTPS.')
+          return false
         }
-      }, {scope: 'publish_video'})
+
+        return new Promise((resolve) => {
+          FB.login(function (response) {
+            if (response.status === 'connected') {
+              facebookAuth.value = true
+              resolve(true)
+            } else {
+              console.error('Facebook login failed')
+              alert('Facebook login failed. Please try again.')
+              resolve(false)
+            }
+          }, {scope: 'publish_video'})
+        })
+      } else if (platform === 'youtube') {
+        try {
+          if (!gapiLoaded.value) {
+            throw new Error('Google API not initialized')
+          }
+          await googleAuth.value.signIn()
+          youtubeAuth.value = true
+          return true
+        } catch (error) {
+          console.error('YouTube auth error:', error)
+          alert('YouTube authentication failed. Please try again.')
+          return false
+        }
+      }
+    }
+
+    const handleLogout = async (platform) => {
+      if (platform === 'facebook') {
+        FB.logout(() => {
+          facebookAuth.value = false
+          uploadTargets.facebook = false
+        })
+      } else if (platform === 'youtube') {
+        try {
+          if (!gapiLoaded.value) {
+            throw new Error('Google API not initialized')
+          }
+          await googleAuth.value.signOut()
+          youtubeAuth.value = false
+          uploadTargets.youtube = false
+        } catch (error) {
+          console.error('YouTube logout error:', error)
+        }
+      }
     }
 
     const handleFileSelect = (event) => {
@@ -147,70 +215,181 @@ export default {
       }
     }
 
-    const handleUpload = async () => {
-      if (!selectedFile.value || !videoDetails.title) return
+    const handleFileDrop = (event) => {
+      const file = event.dataTransfer.files[0]
+      if (file && file.type.startsWith('video/')) {
+        selectedFile.value = file
+        if (!videoDetails.title) {
+          videoDetails.title = file.name.replace(/\.[^/.]+$/, '')
+        }
+      }
+    }
 
-      uploading.value = true
-      uploadProgress.value = 0
-
-      try {
-        // Get user access token
-        const response = await new Promise((resolve) => {
-          FB.getLoginStatus(function(response) {
-            resolve(response)
-          })
+    const uploadToFacebook = async () => {
+      const response = await new Promise((resolve) => {
+        FB.getLoginStatus(function (response) {
+          resolve(response)
         })
+      })
 
-        const accessToken = response.authResponse.accessToken
+      const accessToken = response.authResponse.accessToken
+      const formData = new FormData()
+      formData.append('source', selectedFile.value)
+      formData.append('title', videoDetails.title)
+      formData.append('description', videoDetails.description)
+      formData.append('privacy', JSON.stringify({value: videoDetails.facebookPrivacy}))
 
-        // Initialize upload
-        const formData = new FormData()
-        formData.append('source', selectedFile.value)
-        formData.append('title', videoDetails.title)
-        formData.append('description', videoDetails.description)
-        formData.append('privacy', JSON.stringify({value: videoDetails.privacy}))
+      const xhr = new XMLHttpRequest()
 
-        // Upload to Facebook
-        const uploadResponse = await fetch(
-          `https://graph-video.facebook.com/v18.0/me/videos?access_token=${accessToken}`,
-          {
-            method: 'POST',
-            body: formData
+      xhr.upload.onprogress = (event) => {
+        if (event.lengthComputable) {
+          uploadProgress.Facebook.percentage = Math.round((event.loaded / event.total) * 100)
+          uploadProgress.Facebook.status = 'Uploading...'
+        }
+      }
+
+      return new Promise((resolve, reject) => {
+        xhr.open('POST', `https://graph-video.facebook.com/v18.0/me/videos?access_token=${accessToken}`)
+
+        xhr.onload = () => {
+          if (xhr.status === 200) {
+            uploadProgress.Facebook.status = 'Complete'
+            resolve(JSON.parse(xhr.response))
+          } else {
+            uploadProgress.Facebook.status = 'Failed'
+            reject(new Error('Upload failed'))
           }
-        )
-
-        if (!uploadResponse.ok) {
-          throw new Error('Upload failed')
         }
 
-        const result = await uploadResponse.json()
-        console.log('Upload successful:', result)
+        xhr.onerror = () => {
+          uploadProgress.Facebook.status = 'Failed'
+          reject(new Error('Network error'))
+        }
 
-        alert('Video uploaded successfully!')
+        xhr.send(formData)
+      })
+    }
+
+    const uploadToYouTube = async () => {
+      const accessToken = googleAuth.value.currentUser.get().getAuthResponse().access_token
+      const metadata = {
+        snippet: {
+          title: videoDetails.title,
+          description: videoDetails.description,
+          tags: videoDetails.tags ? videoDetails.tags.split(',').map(tag => tag.trim()) : [],
+        },
+        status: {
+          privacyStatus: videoDetails.youtubePrivacy,
+        }
+      }
+      const blob = new Blob([JSON.stringify(metadata)], {type: 'application/json'})
+      const formData = new FormData()
+      formData.append('metadata', blob, 'metadata.json')
+      formData.append('file', selectedFile.value)
+
+      const xhr = new XMLHttpRequest()
+
+      xhr.upload.onprogress = (event) => {
+        if (event.lengthComputable) {
+          uploadProgress.YouTube.percentage = Math.round((event.loaded / event.total) * 100)
+          uploadProgress.YouTube.status = 'Uploading...'
+        }
+      }
+
+      return new Promise((resolve, reject) => {
+        xhr.open('POST', 'https://www.googleapis.com/upload/youtube/v3/videos?part=snippet,status&uploadType=multipart')
+        xhr.setRequestHeader('Authorization', `Bearer ${accessToken}`)
+
+        xhr.onload = () => {
+          if (xhr.status === 200) {
+            uploadProgress.YouTube.status = 'Complete'
+            resolve(JSON.parse(xhr.response))
+          } else {
+            uploadProgress.YouTube.status = 'Failed'
+            reject(new Error(JSON.parse(xhr.response).error.message || 'Upload failed'))
+          }
+        }
+
+        xhr.onerror = () => {
+          uploadProgress.YouTube.status = 'Failed'
+          reject(new Error('Network error'))
+        }
+
+        xhr.send(formData)
+      })
+    }
+
+    const handleUpload = async () => {
+      if (!selectedFile.value || !videoDetails.title) return
+      if (!uploadTargets.facebook && !uploadTargets.youtube) {
+        alert('Please select at least one platform to upload to')
+        return
+      }
+
+      isUploading.value = true
+      const uploads = []
+
+      try {
+        if (uploadTargets.facebook) {
+          uploadProgress.Facebook = {percentage: 0, status: 'Starting...'}
+          uploads.push(uploadToFacebook())
+        }
+
+        if (uploadTargets.youtube) {
+          uploadProgress.YouTube = {percentage: 0, status: 'Starting...'}
+          uploads.push(uploadToYouTube())
+        }
+
+        await Promise.all(uploads)
+        alert('Upload completed successfully!')
 
         // Reset form
         selectedFile.value = null
         videoDetails.title = ''
         videoDetails.description = ''
-        videoDetails.privacy = 'EVERYONE'
-        uploadProgress.value = 0
+        videoDetails.tags = ''
+        videoDetails.facebookPrivacy = 'EVERYONE'
+        videoDetails.youtubePrivacy = 'private'
       } catch (error) {
         console.error('Upload error:', error)
-        alert('Upload failed. Please try again.')
+        alert(`Upload failed: ${error.message}`)
       } finally {
-        uploading.value = false
+        isUploading.value = false
       }
     }
 
+    const canUpload = computed(() => {
+      return (uploadTargets.facebook || uploadTargets.youtube) &&
+          selectedFile.value &&
+          videoDetails.title &&
+          ((uploadTargets.facebook && facebookAuth.value) ||
+              (uploadTargets.youtube && youtubeAuth.value))
+    })
+
     return {
-      isAuthenticated,
+      facebookAuth,
+      youtubeAuth,
       selectedFile,
+      uploadTargets,
       videoDetails,
       uploadProgress,
-      uploading,
-      handleFBLogin,
+      isUploading,
+      canUpload,
+      handleLogin,
+      handleLogout,
       handleFileSelect,
-      handleUpload
+      handleFileDrop,
+      handleUpload,
+      formatFileSize: (bytes) => {
+        const units = ['B', 'KB', 'MB', 'GB']
+        let size = bytes
+        let unitIndex = 0
+        while (size >= 1024 && unitIndex < units.length - 1) {
+          size /= 1024
+          unitIndex++
+        }
+        return `${size.toFixed(1)} ${units[unitIndex]}`
+      }
     }
   }
 }

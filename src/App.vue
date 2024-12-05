@@ -1,9 +1,9 @@
 <script setup>
 import {ref} from 'vue'
-import VideoUploader from './components/VideoUploader.vue'
-import FacebookVideoUploader from './components/FacebookVideoUploader.vue'
 import StreamingDashboard from './components/StreamingDashboard.vue'
 import {Upload, Video} from 'lucide-vue-next'
+import YoutubeUploader from "./components/YoutubeUploader.vue";
+import NewUploader from "./components/NewUploader.vue";
 
 const currentTab = ref('live')
 const appName = import.meta.env.VITE_APP_NAME
@@ -24,9 +24,10 @@ const appName = import.meta.env.VITE_APP_NAME
     <main class="pt-16 min-h-screen bg-gray-50">
       <div class="max-w-screen-2xl mx-auto px-6 lg:px-8 py-6">
         <!-- Tab Navigation -->
-        <div class="bg-white rounded-xl shadow-sm mb-6 p-1.5">
+        <div style="margin-bottom: 12px" class="bg-white rounded-xl shadow-sm mb-6 p-1.5">
           <div class="flex border-0">
             <button
+                style="margin-right: 1.5rem;"
                 class="mr-12"
                 @click="currentTab = 'live'"
                 :class="[
@@ -36,20 +37,32 @@ const appName = import.meta.env.VITE_APP_NAME
                   : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
               ]"
             >
-              <Video class="w-5 h-5 mr-2.5"/>
+              <Video class="w-5 h-5 mr-2.5 mt-4"/>
               Livestream
             </button>
+            <!--            <button-->
+            <!--                @click="currentTab = 'vod'"-->
+            <!--                :class="[-->
+            <!--                'flex-1 px-8 py-3 text-base font-medium flex items-center justify-center rounded-lg transition-all duration-200',-->
+            <!--                currentTab === 'vod'-->
+            <!--                  ? 'bg-blue-50 text-blue-600 shadow-sm'-->
+            <!--                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'-->
+            <!--              ]"-->
+            <!--            >-->
+            <!--              <Upload class="w-5 h-5 mr-2.5"/>-->
+            <!--              VOD Upload-->
+            <!--            </button>-->
             <button
-                @click="currentTab = 'vod'"
+                @click="currentTab = 'fb'"
                 :class="[
                 'flex-1 px-8 py-3 text-base font-medium flex items-center justify-center rounded-lg transition-all duration-200',
-                currentTab === 'vod'
+                currentTab === 'fb'
                   ? 'bg-blue-50 text-blue-600 shadow-sm'
                   : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
               ]"
             >
               <Upload class="w-5 h-5 mr-2.5"/>
-              VOD Upload
+              Upload video to multiple platforms
             </button>
           </div>
         </div>
@@ -79,8 +92,21 @@ const appName = import.meta.env.VITE_APP_NAME
               leave-to-class="opacity-0 translate-y-4"
           >
             <div v-if="currentTab === 'vod'" key="vod" class="grid lg:grid-cols-2 gap-6">
-              <VideoUploader/>
-              <FacebookVideoUploader/>
+              <YoutubeUploader/>
+            </div>
+          </Transition>
+
+          <!--          Fb-->
+          <Transition
+              enter-active-class="transition-all duration-300 ease-out"
+              enter-from-class="opacity-0 translate-y-4"
+              enter-to-class="opacity-100 translate-y-0"
+              leave-active-class="transition-all duration-200 ease-in"
+              leave-from-class="opacity-100 translate-y-0"
+              leave-to-class="opacity-0 translate-y-4"
+          >
+            <div v-if="currentTab === 'fb'" key="fb" class="grid lg:grid-cols-2 gap-6">
+              <NewUploader/>
             </div>
           </Transition>
         </div>

@@ -60,59 +60,6 @@
         <!-- Configuration Section -->
         <div class="config-section">
           <div class="config-grid">
-            <!-- Server Configuration -->
-            <div class="dashboard-card">
-              <div class="card-header">
-                <Server class="header-icon"/>
-                <h2 class="header-title">Server Configuration</h2>
-                <span class="connection-status" :class="serverConfig.status">
-                  {{ serverConfig.status }}
-                </span>
-              </div>
-              <div class="card-body">
-                <div class="form-group">
-                  <label class="form-label">Flussonic Server URL</label>
-                  <div class="input-wrapper">
-                    <Globe class="input-icon"/>
-                    <input
-                        v-model="serverConfig.url"
-                        type="text"
-                        placeholder="https://your-server.com"
-                        @input="validateServerUrl"
-                        :class="{ 'input-error': serverErrors.url }"
-                        class="form-input"
-                    />
-                  </div>
-                  <span v-if="serverErrors.url" class="error-text">
-                    {{ serverErrors.url }}
-                  </span>
-                </div>
-
-                <div class="form-group">
-                  <label class="form-label">Auth</label>
-                  <div class="input-wrapper">
-                    <Contact class="input-icon"/>
-                    <input
-                        v-model="serverConfig.username"
-                        type="text"
-                        placeholder="Enter your username"
-                        class="form-input mx-2"
-                    />
-                  </div>
-                  <div class="input-wrapper">
-                    <Key class="input-icon"/>
-                    <input
-                        v-model="serverConfig.password"
-                        type="password"
-                        placeholder="Enter your password"
-                        class="form-input mx-2"
-                    />
-                  </div>
-                </div>
-
-              </div>
-            </div>
-
             <!-- Stream Configuration -->
             <div class="dashboard-card">
               <div class="card-header">
@@ -121,13 +68,18 @@
               </div>
               <div class="card-body">
                 <div class="form-group">
-                  <label class="form-label">Stream Name</label>
+                  <label class="form-label">
+                    Stream Name <span class="required-mark">*</span>
+                  </label>
+                  <div class="input-help">
+                    Choose a unique name to identify your stream
+                  </div>
                   <div class="input-wrapper">
                     <Tag class="input-icon"/>
                     <input
                         v-model="streamConfigName"
                         type="text"
-                        placeholder="Enter stream name"
+                        placeholder="e.g., MyGameStream2024"
                         @input="validateStreamName"
                         :class="{ 'input-error': streamErrors.name }"
                         class="form-input"
@@ -137,39 +89,25 @@
                     {{ streamErrors.name }}
                   </span>
                 </div>
+              </div>
+            </div>
 
-                <!--                <div class="form-group">-->
-                <!--                  <label class="form-label">Stream Key</label>-->
-                <!--                  <div class="copy-input-group">-->
-                <!--                    <div class="input-wrapper flex-1">-->
-                <!--                      <Key class="input-icon"/>-->
-                <!--                      <input-->
-                <!--                          v-model="clusterKey"-->
-                <!--                          type="password"-->
-                <!--                          placeholder="Generate or enter stream key"-->
-                <!--                          class="form-input"-->
-                <!--                      />-->
-                <!--                    </div>-->
-                <!--                    <button-->
-                <!--                        class="btn btn-secondary"-->
-                <!--                        @click="generateStreamKey"-->
-                <!--                    >-->
-                <!--                      <RefreshCw class="btn-icon"/>-->
-                <!--                      Generate-->
-                <!--                    </button>-->
-                <!--                    <button-->
-                <!--                        :disabled="!clusterKey"-->
-                <!--                        class="btn btn-secondary"-->
-                <!--                        @click="copyToClipboard(clusterKey)"-->
-                <!--                    >-->
-                <!--                      <Copy class="btn-icon"/>-->
-                <!--                      Copy-->
-                <!--                    </button>-->
-                <!--                  </div>-->
-                <!--                </div>-->
-
+            <!-- Server Configuration -->
+            <div class="dashboard-card">
+              <div class="card-header">
+                <Server class="header-icon"/>
+                <h2 class="header-title">Stream destination</h2>
+                <span class="connection-status" :class="serverConfig.status">
+                  {{ serverConfig.status }}
+                </span>
+              </div>
+              <div class="card-body">
                 <div v-if="isCreateSuccess" class="form-group">
-                  <label class="form-label">RTMP URL</label>
+                  <label class="form-label">RTMP destination</label>
+                  <div class="input-help">
+                    This is your unique streaming endpoint. Copy this URL to your streaming software (OBS, Streamlabs,
+                    etc.)
+                  </div>
                   <div class="copy-input-group">
                     <div class="input-wrapper flex-1">
                       <Link class="input-icon"/>
@@ -191,12 +129,15 @@
                     </button>
                   </div>
                 </div>
+                <div v-else>
+                  <span>No stream</span>
+                </div>
               </div>
             </div>
           </div>
 
           <!-- Relay Configuration -->
-          <div class="dashboard-card mt-6">
+          <div style="margin-bottom: 12px" class="dashboard-card mt-6">
             <div class="card-header">
               <Share class="header-icon"/>
               <h2 class="header-title">Relay Configuration</h2>
@@ -206,6 +147,10 @@
               </button>
             </div>
             <div class="card-body">
+              <div class="help-text mb-4">
+                Configure additional streaming destinations to broadcast your stream to multiple platforms
+                simultaneously
+              </div>
               <div class="relay-list">
                 <TransitionGroup name="list">
                   <div
@@ -220,7 +165,7 @@
                           <input
                               v-model="relay.url"
                               type="text"
-                              :placeholder="`Enter RTMP URL`"
+                              :placeholder="'Enter platform RTMP URL (e.g., rtmp://live.twitch.tv/app)'"
                               @input="() => validateRelayUrl(index)"
                               :class="{ 'input-error': relayErrors[index]?.url }"
                               class="form-input"
@@ -233,14 +178,20 @@
                             <Trash2 class="btn-icon"/>
                           </button>
                         </div>
+                        <div class="input-help mt-1">
+                          Find this URL in your streaming platform's settings
+                        </div>
                         <div style="margin-top:4px" class="input-wrapper">
                           <Key class="input-icon"/>
                           <input
                               v-model="relay.streamKey"
                               type="password"
-                              placeholder="Enter your stream key"
+                              placeholder="Enter your platform's stream key"
                               class="form-input mx-2"
                           />
+                        </div>
+                        <div class="input-help mt-1">
+                          Your stream key is private - never share it with others
                         </div>
                       </div>
                     </div>
@@ -249,24 +200,31 @@
               </div>
             </div>
           </div>
+
+          <div class="action-buttons">
+            <button
+                v-if="serverConfig.status !== 'connected'"
+                class="btn btn-primary w-full"
+                :disabled="!isServerConfigValid || !streamConfigName"
+                @click="saveServerConfig"
+            >
+              <Play class="btn-icon"/>
+              <span>{{ serverConfig.status === 'connecting' ? 'Connecting...' : 'Start stream' }}</span>
+            </button>
+            <button
+                v-if="isCreateSuccess && serverConfig.status === 'connected'"
+                class="btn btn-error w-full"
+                @click="stopStream"
+            >
+              <Pause class="btn-icon"/>
+              <span>Stop stream</span>
+            </button>
+          </div>
+
+          <div v-if="!isServerConfigValid || !streamConfigName" class="validation-help mt-2">
+            Please fill in all required fields marked with * to start streaming
+          </div>
         </div>
-        <button
-            v-if="serverConfig.status !== 'connected'"
-            class="btn btn-primary w-full"
-            :disabled="!isServerConfigValid || !streamConfigName"
-            @click="saveServerConfig"
-        >
-          <Play class="btn-icon"/>
-          <span>{{ serverConfig.status === 'connecting' ? 'Connecting...' : 'Start stream' }}</span>
-        </button>
-        <button
-            v-if="isCreateSuccess && serverConfig.status === 'connected'"
-            class="btn btn-error w-full"
-            @click="stopStream"
-        >
-          <Pause class="btn-icon"/>
-          <span>Stop stream</span>
-        </button>
       </div>
     </div>
   </div>
@@ -297,10 +255,8 @@ import {
   Activity,
   AlertCircle,
   CheckCircle,
-  Contact,
   Copy,
   Gauge,
-  Globe,
   Key,
   Link,
   Monitor,
@@ -516,6 +472,33 @@ onBeforeUnmount(() => {
   --text-primary: #111827;
   --text-secondary: #6b7280;
   --bg-hover: #f3f4f6;
+}
+
+.input-help {
+  font-size: 0.875rem;
+  color: #6b7280;
+  margin-bottom: 0.5rem;
+}
+
+.help-text {
+  font-size: 0.875rem;
+  color: #6b7280;
+  line-height: 1.25rem;
+}
+
+.required-mark {
+  color: #ef4444;
+  margin-left: 0.25rem;
+}
+
+.validation-help {
+  font-size: 0.875rem;
+  color: #ef4444;
+  text-align: center;
+}
+
+.action-buttons {
+  margin-top: 1rem;
 }
 
 .dashboard-container {

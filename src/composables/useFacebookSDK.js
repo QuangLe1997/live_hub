@@ -1,129 +1,65 @@
-// composables/useFacebookSDK.js
-import { ref } from 'vue'
+export function useFacebookUpload() {
+    const uploadVideo = async (file, videoDetails) => {
+        try {
+            // Step 1: Get upload session
+            const sessionResponse = await fetch(
+                `https://graph.facebook.com/v18.0/me/video_uploads?access_token=${accessToken}`,
+                {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        file_size: file.size,
+                        video_title: videoDetails.title
+                    })
+                }
+            );
+            const {upload_session_id, start_offset, end_offset} = await sessionResponse.json();
 
-const isSDKLoaded = ref(false)
-const FB = ref(null)
+            // Step 2: Upload video chunks
+            const chunkSize = 4 * 1024 * 1024; // 4MB chunks
+            let start = start_offset;
 
-export function useFacebookSDK() {
-  const loadSDK = () => {
-    return new Promise((resolve, reject) => {
-      // Only load once
-      if (isSDKLoaded.value) {
-        resolve(FB.value)
-        return
-      }
+            while (start < file.size) {
+                const chunk = file.slice(start, start + chunkSize);
+                const formData = new FormData();
+                formData.append('upload_session_id', upload_session_id);
+                formData.append('start_offset', start);
+                formData.append('video_file_chunk', chunk);
 
-      // Define async init function
-      window.fbAsyncInit = function() {
-        window.FB.init({
-          appId: import.meta.env.VITE_FACEBOOK_APP_ID,
-          cookie: true,
-          xfbml: true,
-          version: 'v18.0'
-        })
+                await fetch(
+                    `https://graph-video.facebook.com/v18.0/me/video_uploads`,
+                    {
+                        method: 'POST',
+                        body: formData
+                    }
+                );
 
-        FB.value = window.FB
-        isSDKLoaded.value = true
-        resolve(FB.value)
-      }
+                start += chunkSize;
+                const progress = Math.min((start / file.size) * 100, 100);
+                emit('upload-progress', progress);
+            }
 
-      // Load the SDK
-      try {
-        const script = document.createElement('script')
-        script.async = true
-        script.defer = true
-        script.crossOrigin = 'anonymous'
-        script.src = 'https://connect.facebook.net/en_US/sdk.js'
-        script.onload = () => console.log('FB SDK script loaded')
-        script.onerror = (error) => reject(new Error('Failed to load Facebook SDK: ' + error))
+            // Step 3: Finish upload and publish
+            const publishResponse = await fetch(
+                `https://graph.facebook.com/v18.0/me/videos`,
+                {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        upload_session_id,
+                        title: videoDetails.title,
+                        description: videoDetails.description,
+                        privacy: {value: videoDetails.privacy},
+                        // Optional metadata
+                        content_category: 'ENTERTAINMENT',
+                        formatting: {duration: video.duration}
+                    })
+                }
+            );
 
-        document.head.appendChild(script)
-      } catch (error) {
-        reject(error)
-      }
-    })
-  }
-
-  const login = async () => {
-    if (!FB.value) {
-      throw new Error('Facebook SDK not initialized')
-    }
-
-    return new Promise((resolve, reject) => {
-      FB.value.login(function(response) {
-        if (response.authResponse) {
-          // User successfully authorized the app
-          resolve(response)
-        } else {
-          // User cancelled login or didn't fully authorize
-          reject(new Error('User cancelled login or did not fully authorize.'))
+            return await publishResponse.json();
+        } catch (error) {
+            throw new Error(`Facebook upload failed: ${error.message}`);
         }
-      }, {
-        scope: 'pages_manage_posts,pages_read_engagement,pages_show_list,pages_messaging',
-        return_scopes: true // This will return the granted scopes
-      })
-    })
-  }
+    };
 
-  const getLoginStatus = async () => {
-    if (!FB.value) {
-      throw new Error('Facebook SDK not initialized')
-    }
-
-    return new Promise((resolve) => {
-      FB.value.getLoginStatus(resolve)
-    })
-  }
-
-  const getUserPages = async () => {
-    if (!FB.value) {
-      throw new Error('Facebook SDK not initialized')
-    }
-
-    return new Promise((resolve, reject) => {
-      FB.value.api('/me/accounts', (response) => {
-        if (!response || response.error) {
-          reject(new Error(response?.error?.message || 'Failed to fetch pages'))
-          return
-        }
-        resolve(response)
-      })
-    })
-  }
-
-  const uploadVideo = async ({ pageId, pageAccessToken, file, title, description, privacy }) => {
-    if (!FB.value) {
-      throw new Error('Facebook SDK not initialized')
-    }
-
-    const formData = new FormData()
-    formData.append('source', file)
-    formData.append('title', title)
-    formData.append('description', description)
-    formData.append('privacy', JSON.stringify({ value: privacy }))
-
-    return fetch(
-      `https://graph-video.facebook.com/v18.0/${pageId}/videos?access_token=${pageAccessToken}`,
-      {
-        method: 'POST',
-        body: formData
-      }
-    ).then(response => {
-      if (!response.ok) {
-        return response.json().then(error => {
-          throw new Error(error.error?.message || 'Upload failed')
-        })
-      }
-      return response.json()
-    })
-  }
-
-  return {
-    loadSDK,
-    login,
-    getLoginStatus,
-    getUserPages,
-    uploadVideo,
-    isSDKLoaded
-  }
+    return {uploadVideo};
 }

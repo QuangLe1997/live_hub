@@ -192,14 +192,13 @@
 import {onMounted, reactive, ref} from 'vue'
 
 export default {
-  name: 'VideoUploader',
+  name: 'NewUploader',
   setup() {
     const facebookAuth = ref(false)
     const youtubeAuth = ref(false)
     const selectedFile = ref(null)
     const isUploading = ref(false)
-    const gapiLoaded = ref(false)
-    const googleAuth = ref(null)
+    const tokenClient = ref(null)
 
     const uploadTargets = reactive({
       facebook: false,
@@ -219,39 +218,57 @@ export default {
       youtubePrivacy: 'private'
     })
 
-    const initGoogleAuth = async () => {
-      try {
-        await new Promise((resolve) => {
-          const script = document.createElement('script')
-          script.src = 'https://apis.google.com/js/api.js'
-          script.onload = resolve
-          document.head.appendChild(script)
-        })
-
-        await new Promise((resolve) => {
-          window.gapi.load('client:auth2', resolve)
-        })
-
-        await window.gapi.client.init({
-          clientId: import.meta.env.VITE_GOOGLE_CLIENT_ID,
-          scope: 'https://www.googleapis.com/auth/youtube.upload',
-          discoveryDocs: ['https://www.googleapis.com/discovery/v1/apis/youtube/v3/rest']
-        })
-
-        googleAuth.value = window.gapi.auth2.getAuthInstance()
-        gapiLoaded.value = true
-
-        // Check if user is already signed in
-        if (googleAuth.value.isSignedIn.get()) {
-          youtubeAuth.value = true
+    // New YouTube specific setup
+    const initYouTubeAuth = () => {
+      // Load GAPI Script
+      return new Promise((resolve, reject) => {
+        const script = document.createElement('script')
+        script.src = 'https://apis.google.com/js/api.js'
+        script.onload = () => {
+          gapi.load('client', async () => {
+            try {
+              await gapi.client.init({
+                apiKey: import.meta.env.VITE_YOUTUBE_API_KEY,
+                discoveryDocs: ['https://www.googleapis.com/discovery/v1/apis/youtube/v3/rest'],
+              })
+              loadGsiScript()
+              resolve()
+            } catch (err) {
+              reject(err)
+            }
+          })
         }
-      } catch (error) {
-        console.error('Failed to initialize Google API:', error)
-      }
+        script.onerror = (err) => reject(err)
+        document.head.appendChild(script)
+      })
+    }
+
+    const loadGsiScript = () => {
+      return new Promise((resolve, reject) => {
+        const script = document.createElement('script')
+        script.src = 'https://accounts.google.com/gsi/client'
+        script.onload = () => {
+          tokenClient.value = google.accounts.oauth2.initTokenClient({
+            client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID,
+            scope: 'https://www.googleapis.com/auth/youtube.upload',
+            callback: (resp) => {
+              if (resp.error !== undefined) {
+                console.error('YouTube auth error:', resp.error)
+                youtubeAuth.value = false
+                return
+              }
+              youtubeAuth.value = true
+            },
+          })
+          resolve()
+        }
+        script.onerror = (err) => reject(err)
+        document.head.appendChild(script)
+      })
     }
 
     onMounted(() => {
-      initGoogleAuth()
+      initYouTubeAuth()
     })
 
     const handleLogin = async (platform) => {
@@ -270,11 +287,7 @@ export default {
         })
       } else if (platform === 'youtube') {
         try {
-          if (!gapiLoaded.value) {
-            throw new Error('Google API not initialized')
-          }
-          await googleAuth.value.signIn()
-          youtubeAuth.value = true
+          tokenClient.value.requestAccessToken()
           return true
         } catch (error) {
           console.error('YouTube auth error:', error)
@@ -292,12 +305,13 @@ export default {
         })
       } else if (platform === 'youtube') {
         try {
-          if (!gapiLoaded.value) {
-            throw new Error('Google API not initialized')
+          const token = gapi.client.getToken()
+          if (token !== null) {
+            google.accounts.oauth2.revoke(token.access_token)
+            gapi.client.setToken('')
+            youtubeAuth.value = false
+            uploadTargets.youtube = false
           }
-          await googleAuth.value.signOut()
-          youtubeAuth.value = false
-          uploadTargets.youtube = false
         } catch (error) {
           console.error('YouTube logout error:', error)
         }
@@ -318,6 +332,78 @@ export default {
         if (!videoDetails.title) {
           videoDetails.title = file.name.replace(/\.[^/.]+$/, '')
         }
+      }
+    }
+
+    const readFileAsBase64 = (file) => {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader()
+        reader.readAsDataURL(file)
+        reader.onload = () => {
+          const base64 = reader.result.split(',')[1]
+          resolve(base64)
+        }
+        reader.onerror = error => reject(error)
+      })
+    }
+
+    // Updated YouTube upload function
+    const uploadToYouTube = async () => {
+      try {
+        uploadProgress.YouTube = {percentage: 0, status: 'Starting...'}
+
+        const metadata = {
+          snippet: {
+            title: videoDetails.title,
+            description: videoDetails.description,
+            tags: videoDetails.tags ? videoDetails.tags.split(',').map(tag => tag.trim()) : []
+          },
+          status: {
+            privacyStatus: videoDetails.youtubePrivacy
+          }
+        }
+
+        const boundary = 'foo_bar_baz'
+        const delimiter = "\r\n--" + boundary + "\r\n"
+        const closeDelimiter = "\r\n--" + boundary + "--"
+
+        const base64Data = await readFileAsBase64(selectedFile.value)
+
+        const multipartRequestBody =
+            delimiter +
+            'Content-Type: application/json\r\n\r\n' +
+            JSON.stringify(metadata) +
+            delimiter +
+            'Content-Type: ' + selectedFile.value.type + '\r\n' +
+            'Content-Transfer-Encoding: base64\r\n' +
+            '\r\n' +
+            base64Data +
+            closeDelimiter
+
+        const request = gapi.client.request({
+          'path': '/upload/youtube/v3/videos',
+          'method': 'POST',
+          'params': {
+            'uploadType': 'multipart',
+            'part': 'snippet,status'
+          },
+          'headers': {
+            'Content-Type': 'multipart/related; boundary="' + boundary + '"'
+          },
+          'body': multipartRequestBody
+        })
+
+        const response = await request
+
+        if (response.result.id) {
+          uploadProgress.YouTube = {percentage: 100, status: 'Complete'}
+          return response.result
+        } else {
+          throw new Error('Upload failed: No video ID received')
+        }
+      } catch (error) {
+        uploadProgress.YouTube = {percentage: 0, status: 'Failed'}
+        throw error
       }
     }
 
@@ -359,55 +445,6 @@ export default {
 
         xhr.onerror = () => {
           uploadProgress.Facebook.status = 'Failed'
-          reject(new Error('Network error'))
-        }
-
-        xhr.send(formData)
-      })
-    }
-
-    const uploadToYouTube = async () => {
-      const accessToken = googleAuth.value.currentUser.get().getAuthResponse().access_token
-      const metadata = {
-        snippet: {
-          title: videoDetails.title,
-          description: videoDetails.description,
-          tags: videoDetails.tags ? videoDetails.tags.split(',').map(tag => tag.trim()) : [],
-        },
-        status: {
-          privacyStatus: videoDetails.youtubePrivacy,
-        }
-      }
-      const blob = new Blob([JSON.stringify(metadata)], {type: 'application/json'})
-      const formData = new FormData()
-      formData.append('metadata', blob, 'metadata.json')
-      formData.append('file', selectedFile.value)
-
-      const xhr = new XMLHttpRequest()
-
-      xhr.upload.onprogress = (event) => {
-        if (event.lengthComputable) {
-          uploadProgress.YouTube.percentage = Math.round((event.loaded / event.total) * 100)
-          uploadProgress.YouTube.status = 'Uploading...'
-        }
-      }
-
-      return new Promise((resolve, reject) => {
-        xhr.open('POST', 'https://www.googleapis.com/upload/youtube/v3/videos?part=snippet,status&uploadType=multipart')
-        xhr.setRequestHeader('Authorization', `Bearer ${accessToken}`)
-
-        xhr.onload = () => {
-          if (xhr.status === 200) {
-            uploadProgress.YouTube.status = 'Complete'
-            resolve(JSON.parse(xhr.response))
-          } else {
-            uploadProgress.YouTube.status = 'Failed'
-            reject(new Error(JSON.parse(xhr.response).error.message || 'Upload failed'))
-          }
-        }
-
-        xhr.onerror = () => {
-          uploadProgress.YouTube.status = 'Failed'
           reject(new Error('Network error'))
         }
 
@@ -654,8 +691,8 @@ select:focus {
 
 .uploader-container {
   display: grid;
-  grid-template-columns: 300px 1fr;
-  gap: 24px;
+  grid-template-columns: 300px 700px;
+  gap: 12px;
   max-width: 1200px;
   margin: 0 auto;
   padding: 24px;
